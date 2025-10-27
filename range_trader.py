@@ -100,26 +100,34 @@ def apply_user_theme(user):
 def get_yahoo_intraday(symbol: str):
     """
     Get intraday 5-minute candles for today using yfinance.
-    Returns (df, err). df has datetime index and OHLC.
+    Force timestamps so Yahoo always returns data during market hours.
     """
     try:
-        df = yf.download(symbol, period="1d", interval="5m", progress=False)
+        now = datetime.now()
+        start = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        end = now
+        df = yf.download(
+            symbol,
+            start=start,
+            end=end,
+            interval="5m",
+            progress=False,
+            prepost=False,
+        )
     except Exception as e:
         return None, f"Yahoo error: {e}"
 
     if df is None or df.empty:
-        return None, "No intraday data from Yahoo"
+        return None, f"No intraday data from Yahoo for {symbol} between {start} and {end}"
 
-    # Normalize columns like our old Finnhub function did
     out = pd.DataFrame({
-        "t": df.index,        # timestamp
+        "t": df.index,
         "Open": df["Open"],
         "High": df["High"],
         "Low": df["Low"],
         "Close": df["Close"],
         "Volume": df["Volume"],
     })
-
     return out, None
 
 def calc_levels(df_5m: pd.DataFrame, atr_lookback=14, cushion_frac=0.25):
@@ -446,6 +454,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
