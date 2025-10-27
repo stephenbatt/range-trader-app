@@ -129,6 +129,19 @@ def get_yahoo_intraday(symbol: str):
         "Volume": df["Volume"],
     })
     return out, None
+    
+    if df is None or df.empty:
+        return None, f"No intraday data from Yahoo for {symbol} between {start} and {end}"
+
+    out = pd.DataFrame({
+        "t": df.index,
+        "Open": df["Open"],
+        "High": df["High"],
+        "Low": df["Low"],
+        "Close": df["Close"],
+        "Volume": df["Volume"],
+    })
+    return out, None
 
 def calc_levels(df_5m: pd.DataFrame, atr_lookback=14, cushion_frac=0.25):
     """
@@ -454,6 +467,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
