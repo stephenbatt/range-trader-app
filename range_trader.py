@@ -19,9 +19,9 @@ USER_PINS = {
 }
 
 USER_THEMES = {
-    "dad":   {"bg": "#0d1b3d", "fg": "#ffffff", "label": "Dad"},
-    "neil":  {"bg": "#1a1a1a", "fg": "#ffffff", "label": "Neil"},
-    "lucas": {"bg": "#2b2f33", "fg": "#ffffff", "label": "Lucas"},
+    "dad":   {"bg": "#f0f2f6", "fg": "#000000", "label": "Dad"},
+    "neil":  {"bg": "#f9fafc", "fg": "#000000", "label": "Neil"},
+    "lucas": {"bg": "#ffffff", "fg": "#000000", "label": "Lucas"},
     "guest": {"bg": "#ffffff", "fg": "#000000", "label": "Guest"},
 }
 
@@ -418,5 +418,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
