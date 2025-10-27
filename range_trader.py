@@ -30,13 +30,20 @@ data["ATR"] = (
 latest = data.iloc[-1]
 opening_range_high = latest["High"]
 opening_range_low = latest["Low"]
-atr = latest["ATR"]
+# --- Compute and sanitize ATR -------------------------------------------------
+atr_val = latest["ATR"]
 
-# Handle missing or bad ATR values
-if pd.isna(atr) or atr == 0:
-    atr = (data["High"].iloc[-14:] - data["Low"].iloc[-14:]).mean()
-    if pd.isna(atr) or atr == 0:
-        atr = 1.0  # fallback so nothing crashes
+# If it's a Series or NaN, reduce to a single safe float
+try:
+    atr = float(atr_val)
+except Exception:
+    atr = np.nan
+
+if np.isnan(atr) or atr == 0:
+    # fallback: mean of last 14 daily ranges
+    atr = float((data["High"].iloc[-14:] - data["Low"].iloc[-14:]).mean())
+    if np.isnan(atr) or atr == 0:
+        atr = 1.0  # final safety fallback so nothing crashes
 
 cushion = 0.25 * atr
 high_level = opening_range_high + cushion
@@ -47,7 +54,6 @@ col1, col2, col3 = st.columns(3)
 col1.metric("ATR", f"{atr:.2f}")
 col2.metric("High Level", f"{high_level:.2f}")
 col3.metric("Low Level", f"{low_level:.2f}")
-
 
 # --- Session State ------------------------------------------------------------
 if "tracking" not in st.session_state:
