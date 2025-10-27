@@ -247,6 +247,7 @@ def show_login():
             st.session_state.logged_in = True
             st.session_state.user = username
             st.success(f"Welcome, {USER_THEMES[username]['name']} ✅")
+            st.experimental_rerun() 
         else:
             st.error("Invalid login")
 
@@ -411,3 +412,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
