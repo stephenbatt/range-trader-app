@@ -107,10 +107,17 @@ def apply_user_theme(user):
 # Data helpers
 # ==========================================================
 def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
+    """
+    Pull recent intraday 5m candles from Finnhub.
+    Returns (df, err). df has t, Open, High, Low, Close, Volume.
+    Handles soft errors gracefully instead of killing the app.
+    """
     if not FINNHUB_KEY:
         return None, "No FINNHUB_KEY in secrets"
+
     now = int(datetime.now().timestamp())
     frm = now - (lookback_minutes * 60)
+
     url = (
         "https://finnhub.io/api/v1/stock/candle"
         f"?symbol={symbol.upper()}"
@@ -119,12 +126,22 @@ def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
         f"&to={now}"
         f"&token={FINNHUB_KEY}"
     )
-    r = requests.get(url)
+
+    try:
+        r = requests.get(url, timeout=10)
+    except Exception as e:
+        st.warning(f"⚠️ Finnhub request failed: {e}")
+        return None, "Request error"
+
     if r.status_code != 200:
-        return None, f"Finnhub HTTP {r.status_code}"
+        st.warning(f"⚠️ Finnhub non-200 ({r.status_code}) — might be rate limit or weekend")
+        return None, None
+
     data = r.json()
     if data.get("s") != "ok":
-        return None, "Finnhub returned no data"
+        st.warning("⚠️ Finnhub returned no data (market closed or key throttled temporarily)")
+        return None, None
+
     df = pd.DataFrame({
         "t": pd.to_datetime(data["t"], unit="s"),
         "Open": data["o"],
@@ -133,6 +150,11 @@ def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
         "Close": data["c"],
         "Volume": data["v"],
     })
+
+    if df.empty:
+        st.warning("⚠️ Finnhub returned an empty dataframe (possible market holiday)")
+        return None, None
+
     return df, None
 
 def calc_levels(df_5m: pd.DataFrame, atr_lookback=14, cushion_frac=0.25):
@@ -371,6 +393,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
