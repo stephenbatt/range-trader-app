@@ -421,66 +421,91 @@ def beginner_scan():
 # LOGIN SCREEN (VIDEO BG)
 # ==========================================================
 def show_login():
-    # --- Background Video ---
+    # Custom CSS background (gradient, animated pulse style),
+    # and a glass card for the login box.
     st.markdown(
         """
         <style>
-        .video-bg {
-            position: fixed;
-            right: 0;
-            bottom: 0;
-            min-width: 100vw;
-            min-height: 100vh;
-            z-index: -1;
-            object-fit: cover;
+        body, .stApp {
+            background: radial-gradient(circle at 20% 20%, #001428 0%, #000000 70%);
+            background-size: 200% 200%;
+            animation: bgmove 6s ease-in-out infinite alternate;
         }
-        .login-container {
-            position: relative;
-            z-index: 10;
+        @keyframes bgmove {
+            0%   { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+        .login-wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
             width: 320px;
-            margin: 18vh auto;
-            padding: 1.8rem;
-            background: rgba(255, 255, 255, 0.12);
-            backdrop-filter: blur(10px);
             border-radius: 20px;
-            box-shadow: 0 4px 30px rgba(0,0,0,0.25);
+            padding: 1.5rem 1.25rem 1rem 1.25rem;
+            background: rgba(15, 25, 45, 0.6);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.8);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #fff;
             text-align: center;
         }
-        .login-input input {
+        .login-logo {
+            width: 72px;
+            height: 72px;
+            border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.25);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            object-fit: contain;
+            margin-bottom: 0.5rem;
+            background-color: #0f1a2d;
+        }
+        .login-title {
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 1rem;
+        }
+        .small-hint {
+            color: #6d7a9c;
+            font-size: 0.7rem;
+            line-height: 1.2;
+            margin-top: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .stTextInput input {
             text-align: center;
         }
         </style>
 
-        <video autoplay muted loop class="video-bg">
-            <source src="login_bg.mp4" type="video/mp4">
-        </video>
+        <div class="login-wrapper">
+            <div class="login-card">
+                <img class="login-logo" src="data:image/x-icon;base64,REPLACE_BASE64_LOGO_HERE" />
+                <div class="login-title">
+                    🔐 Redeyebatt Range Trader<br/>
+                    <span style="color:#6d7a9c; font-weight:400;">Breakout · Breakdown · Range Defense</span>
+                </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # --- Logo and Title ---
-    st.markdown(
-        """
-        <div class="login-container">
-            <img src="range_trader.ico" width="90" style="border-radius:50%; margin-bottom:10px;">
-            <h2>🔐 Redeyebatt Range Trader</h2>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    username = st.text_input("Username", key="user_input").strip().lower()
+    st.markdown('<div class="small-hint">dad / neil / lucas / guest</div>', unsafe_allow_html=True)
+    pin = st.text_input("PIN", type="password", key="pin_input")
+    st.markdown('<div class="small-hint">Your private code</div>', unsafe_allow_html=True)
 
-    # --- Login Inputs ---
-    c1, c2 = st.columns(2)
-    with c1:
-        username = st.text_input("Username (dad / neil / lucas / guest)").strip().lower()
-    with c2:
-        pin = st.text_input("PIN", type="password")
+    login_btn = st.button("Log In", use_container_width=True)
 
-    if st.button("Log In"):
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+    if login_btn:
         if username in USER_PINS and pin == USER_PINS[username]:
             st.session_state.logged_in = True
             st.session_state.user = username
-            st.success(f"Welcome, {USER_THEMES[username]['label']} ✅")
             st.rerun()
         else:
             st.error("Invalid login")
@@ -639,6 +664,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
