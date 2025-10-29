@@ -108,16 +108,17 @@ def apply_user_theme(user):
 # ==========================================================
 def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
     """
-    Pull recent intraday 5m candles from Finnhub.
-    Returns (df, err). df has t, Open, High, Low, Close, Volume.
-    Handles soft errors gracefully instead of killing the app.
+    Finnhub-only, slowed-down version to avoid rate limits.
+    Sleeps a few seconds between calls and warns politely.
     """
+    import time
+    time.sleep(3)
+
     if not FINNHUB_KEY:
         return None, "No FINNHUB_KEY in secrets"
 
     now = int(datetime.now().timestamp())
     frm = now - (lookback_minutes * 60)
-
     url = (
         "https://finnhub.io/api/v1/stock/candle"
         f"?symbol={symbol.upper()}"
@@ -131,16 +132,20 @@ def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
         r = requests.get(url, timeout=10)
     except Exception as e:
         st.warning(f"⚠️ Finnhub request failed: {e}")
-        return None, "Request error"
+        return None, "Network error"
+
+    if r.status_code == 403:
+        st.warning("⏳ Finnhub 403 (throttled) — waiting a few minutes will clear it.")
+        return None, "Throttled (403)"
 
     if r.status_code != 200:
-        st.warning(f"⚠️ Finnhub non-200 ({r.status_code}) — might be rate limit or weekend")
-        return None, None
+        st.warning(f"⚠️ Finnhub HTTP {r.status_code}")
+        return None, f"HTTP {r.status_code}"
 
     data = r.json()
     if data.get("s") != "ok":
-        st.warning("⚠️ Finnhub returned no data (market closed or key throttled temporarily)")
-        return None, None
+        st.warning("⚠️ Finnhub returned no data (maybe closed market)")
+        return None, "No data"
 
     df = pd.DataFrame({
         "t": pd.to_datetime(data["t"], unit="s"),
@@ -152,11 +157,11 @@ def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
     })
 
     if df.empty:
-        st.warning("⚠️ Finnhub returned an empty dataframe (possible market holiday)")
-        return None, None
+        st.warning("⚠️ Finnhub returned empty dataframe (possible market holiday)")
+        return None, "Empty"
 
     return df, None
-
+    
 def calc_levels(df_5m: pd.DataFrame, atr_lookback=14, cushion_frac=0.25):
     if df_5m is None or len(df_5m) < 6:
         return None
@@ -393,6 +398,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
