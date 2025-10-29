@@ -40,6 +40,17 @@ ALPACA_BASE_URL = st.secrets.get(
     "ALPACA_BASE_URL",
     "https://paper-api.alpaca.markets"
 )
+# --- TEMPORARY TEST ---
+st.write("✅ Finnhub key loaded:", repr(FINNHUB_KEY))
+
+if FINNHUB_KEY:
+    test_url = f"https://finnhub.io/api/v1/quote?symbol=SPY&token={FINNHUB_KEY}"
+    r = requests.get(test_url)
+    st.write("✅ Test status code:", r.status_code)
+    st.write("✅ Test response:", r.text)
+else:
+    st.error("❌ FINNHUB_KEY is missing or empty.")
+# --- END TEST ---
 
 # ==========================================================
 # State init
@@ -360,6 +371,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
