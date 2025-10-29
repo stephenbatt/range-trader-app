@@ -4,6 +4,17 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import plotly.graph_objects as go
+# --- TEMPORARY TEST ---
+st.write("✅ Finnhub key loaded:", repr(FINNHUB_KEY))
+
+if FINNHUB_KEY:
+    test_url = f"https://finnhub.io/api/v1/quote?symbol=SPY&token={FINNHUB_KEY}"
+    r = requests.get(test_url)
+    st.write("✅ Test status code:", r.status_code)
+    st.write("✅ Test response:", r.text)
+else:
+    st.error("❌ FINNHUB_KEY is missing or empty.")
+# --- END TEST ---
 
 # ==========================================================
 # Redeyebatt Range + Breakout + Breakdown Hybrid
@@ -360,4 +371,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
