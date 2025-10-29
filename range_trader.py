@@ -518,7 +518,34 @@ def show_dashboard():
     theme = apply_theme(user)
 
     st.markdown(f"### Welcome, {theme['label']}")
+    def show_dashboard():
+    user = st.session_state.user
+    theme = apply_user_theme(user)
 
+    st.markdown(f"### Welcome, {theme['label']}")
+st.markdown("""
+<style>
+/* shrink and center the main container */
+section[data-testid="stSidebar"] {width: 280px !important;}
+div.block-container {
+    max-width: 900px;  /* keep content from stretching */
+    margin: auto;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
+/* tighten metric boxes */
+[data-testid="stMetricValue"] {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+/* keep tables compact */
+[data-testid="stDataFrame"] {
+    font-size: 0.9rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
     # SIDEBAR CONTROLS
     st.sidebar.header("Session Controls")
 
@@ -664,6 +691,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
