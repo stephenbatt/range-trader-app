@@ -421,7 +421,7 @@ def beginner_scan():
 # LOGIN SCREEN (VIDEO BG)
 # ==========================================================
 def show_login():
-    # full-bleed background video
+    # --- Background Video ---
     st.markdown(
         """
         <style>
@@ -433,15 +433,24 @@ def show_login():
             min-height: 100vh;
             z-index: -1;
             object-fit: cover;
-            filter: brightness(0.4) saturate(1.2);
+        }
+        .login-container {
+            position: relative;
+            z-index: 10;
+            width: 320px;
+            margin: 18vh auto;
+            padding: 1.8rem;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 4px 30px rgba(0,0,0,0.25);
+            text-align: center;
+        }
+        .login-input input {
+            text-align: center;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    st.markdown(
-        """
         <video autoplay muted loop class="video-bg">
             <source src="login_bg.mp4" type="video/mp4">
         </video>
@@ -449,24 +458,32 @@ def show_login():
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    st.markdown('<div class="login-title">Redeyebatt Trading Terminal</div>', unsafe_allow_html=True)
-    st.markdown('<div class="small-caption">Private access • Paper trading only • Do not share</div>', unsafe_allow_html=True)
+    # --- Logo and Title ---
+    st.markdown(
+        """
+        <div class="login-container">
+            <img src="range_trader.ico" width="90" style="border-radius:50%; margin-bottom:10px;">
+            <h2>🔐 Redeyebatt Range Trader</h2>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    username = st.text_input("User", key="login_user").strip().lower()
-    pin = st.text_input("PIN", key="login_pin", type="password")
+    # --- Login Inputs ---
+    c1, c2 = st.columns(2)
+    with c1:
+        username = st.text_input("Username (dad / neil / lucas / guest)").strip().lower()
+    with c2:
+        pin = st.text_input("PIN", type="password")
 
-    login_click = st.button("Enter", key="login_button")
-
-    if login_click:
+    if st.button("Log In"):
         if username in USER_PINS and pin == USER_PINS[username]:
             st.session_state.logged_in = True
             st.session_state.user = username
+            st.success(f"Welcome, {USER_THEMES[username]['label']} ✅")
             st.rerun()
         else:
-            st.error("Access denied")
-
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.error("Invalid login")
 
 # ==========================================================
 # DASHBOARD (AFTER LOGIN)
@@ -622,5 +639,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
