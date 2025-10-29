@@ -515,37 +515,35 @@ def show_login():
 # ==========================================================
 def show_dashboard():
     user = st.session_state.user
-    theme = apply_theme(user)
-
-    st.markdown(f"### Welcome, {theme['label']}")
-    def show_dashboard():
-    user = st.session_state.user
     theme = apply_user_theme(user)
 
     st.markdown(f"### Welcome, {theme['label']}")
-st.markdown("""
-<style>
-/* shrink and center the main container */
-section[data-testid="stSidebar"] {width: 280px !important;}
-div.block-container {
-    max-width: 900px;  /* keep content from stretching */
-    margin: auto;
-    padding-top: 1.5rem;
-    padding-bottom: 1.5rem;
-}
 
-/* tighten metric boxes */
-[data-testid="stMetricValue"] {
-    font-size: 1.2rem;
-    font-weight: 600;
-}
+    # 🧩 Layout Fix: center dashboard and tighten metrics/tables
+    st.markdown("""
+    <style>
+    /* shrink and center the main container */
+    section[data-testid="stSidebar"] {width: 280px !important;}
+    div.block-container {
+        max-width: 900px;  /* keep content from stretching */
+        margin: auto;
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+    }
 
-/* keep tables compact */
-[data-testid="stDataFrame"] {
-    font-size: 0.9rem !important;
-}
-</style>
-""", unsafe_allow_html=True)
+    /* tighten metric boxes */
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem;
+        font-weight: 600;
+    }
+
+    /* keep tables compact */
+    [data-testid="stDataFrame"] {
+        font-size: 0.9rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # SIDEBAR CONTROLS
     st.sidebar.header("Session Controls")
 
@@ -570,8 +568,8 @@ div.block-container {
     # ACCOUNT / CONNECTION
     colA, colB, colC = st.columns(3)
     if acct and not acct_err:
-        colA.metric("Buying Power", f"${float(acct.get('buying_power',0)):,.2f}")
-        colB.metric("Cash", f"${float(acct.get('cash',0)):,.2f}")
+        colA.metric("Buying Power", f"${float(acct.get('buying_power', 0)):,.2f}")
+        colB.metric("Cash", f"${float(acct.get('cash', 0)):,.2f}")
         colC.success("Alpaca Connected ✅")
     else:
         colA.write("Alpaca not connected")
@@ -678,7 +676,6 @@ div.block-container {
         recs = beginner_scan()
         st.dataframe(recs, use_container_width=True)
     st.caption("Goal: stop gambling. Only touch tickers that are actually moving.")
-
 # ==========================================================
 # MAIN
 # ==========================================================
@@ -691,6 +688,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
