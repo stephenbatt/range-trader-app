@@ -33,13 +33,119 @@ USER_THEMES = {
 # -------------------------
 # Secrets from Streamlit Cloud
 # -------------------------
-FINNHUB_KEY = st.secrets.get("FINNHUB_KEY", None)
-ALPACA_KEY = st.secrets.get("ALPACA_KEY", None)
-ALPACA_SECRET = st.secrets.get("ALPACA_SECRET", None)
-ALPACA_BASE_URL = st.secrets.get(
-    "ALPACA_BASE_URL",
-    "https://paper-api.alpaca.markets"
-)
+from datetime import datetime, timedelta, timezone
+
+# -------- helpers: shape DataFrame in one place --------
+def _as_ohlcv_df(times, opens, highs, lows, closes, volumes):
+    return pd.DataFrame({
+        "t": pd.to_datetime(times, unit="s"),
+        "Open": opens,
+        "High": highs,
+        "Low":  lows,
+        "Close": closes,
+        "Volume": volumes,
+    })
+
+# -------- FINNHUB (cached 60s) --------
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_finnhub_5m(symbol: str, lookback_minutes: int = 390):
+    if not FINNHUB_KEY:
+        return None, "No FINNHUB_KEY in secrets"
+
+    now_s = int(datetime.now(timezone.utc).timestamp())
+    frm_s = now_s - (lookback_minutes * 60)
+
+    url = (
+        "https://finnhub.io/api/v1/stock/candle"
+        f"?symbol={symbol.upper()}"
+        f"&resolution=5"
+        f"&from={frm_s}"
+        f"&to={now_s}"
+        f"&token={FINNHUB_KEY}"
+    )
+    r = requests.get(url, timeout=10)
+    if r.status_code == 403:
+        return None, "Finnhub 403 (throttled)"
+    if r.status_code != 200:
+        return None, f"Finnhub HTTP {r.status_code}"
+
+    data = r.json()
+    if data.get("s") != "ok":
+        return None, "Finnhub returned no data"
+
+    df = _as_ohlcv_df(
+        times = data["t"],
+        opens = data["o"],
+        highs = data["h"],
+        lows  = data["l"],
+        closes= data["c"],
+        volumes=data["v"],
+    )
+    if df.empty:
+        return None, "Finnhub empty"
+    return df, None
+
+# -------- POLYGON (cached 60s) --------
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_polygon_5m(symbol: str, lookback_minutes: int = 390):
+    if not POLYGON_KEY:
+        return None, "No POLYGON_KEY in secrets"
+
+    # Polygon v2 aggregates: path uses ms timestamps or dates; use ms for precise window
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    frm_ms = now_ms - (lookback_minutes * 60 * 1000)
+
+    url = (
+        f"https://api.polygon.io/v2/aggs/ticker/{symbol.upper()}/range/5/minute/{frm_ms}/{now_ms}"
+        f"?adjusted=true&sort=asc&limit=50000&apiKey={POLYGON_KEY}"
+    )
+    r = requests.get(url, timeout=10)
+    if r.status_code == 403:
+        return None, "Polygon 403"
+    if r.status_code != 200:
+        return None, f"Polygon HTTP {r.status_code}"
+
+    js = r.json()
+    if js.get("status") != "OK" or not js.get("results"):
+        return None, "Polygon returned no data"
+
+    res = js["results"]
+    df = pd.DataFrame({
+        "t": pd.to_datetime([row["t"] for row in res], unit="ms"),
+        "Open":  [row["o"] for row in res],
+        "High":  [row["h"] for row in res],
+        "Low":   [row["l"] for row in res],
+        "Close": [row["c"] for row in res],
+        "Volume":[row.get("v", 0) for row in res],
+    })
+    if df.empty:
+        return None, "Polygon empty"
+    return df, None
+
+# -------- ONE CALL for the dashboard --------
+def get_intraday_5m(symbol: str, lookback_minutes: int = 390):
+    """
+    Unified fetch:
+      1) Try Finnhub (cached 60s)
+      2) If Finnhub fails/throttles, try Polygon (cached 60s)
+    Returns: (df, source_name, err) where source_name is 'Finnhub' or 'Polygon'
+    """
+    # Primary: Finnhub
+    df, err = _fetch_finnhub_5m(symbol, lookback_minutes)
+    if df is not None and err is None:
+        return df, "Finnhub ✅", None
+
+    # Fallback: Polygon
+    df2, err2 = _fetch_polygon_5m(symbol, lookback_minutes)
+    if df2 is not None and err2 is None:
+        # carry on, but let the UI know we're on backup
+        return df2, "Polygon 🟡", None
+
+    # Both failed
+    # Prefer to surface the Finnhub error first; include Polygon's for context
+    combined_err = f"{err or 'Finnhub failed'}; fallback: {err2 or 'Polygon failed'}"
+    return None, None, combined_err
+
 
 # ==========================================================
 # State init
@@ -360,3 +466,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
