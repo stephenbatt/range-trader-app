@@ -1,42 +1,80 @@
-import streamlit as st 
+import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime
 import plotly.graph_objects as go
 
-# =========================
-# CONFIG / PAGE
-# =========================
-st.set_page_config(page_title="Redeyebatt Range Trader Terminal", layout="wide")
+# ==========================================================
+# Redeyebatt Range + Breakout + Breakdown Hybrid
+# Full integrated terminal w/ login, scanner, paper trade hooks
+# ==========================================================
 
-# Themes per user
-USER_THEMES = {
-    "dad": {"bg": "#0d1b3d", "fg": "#ffffff", "name": "Dad"},
-    "neil": {"bg": "#1a1a1a", "fg": "#ffffff", "name": "Neil"},
-    "lucas": {"bg": "#2b2f33", "fg": "#ffffff", "name": "Lucas"},
-    "guest": {"bg": "#ffffff", "fg": "#000000", "name": "Guest"},
-}
+st.set_page_config(page_title="Redeyebatt Range Trader", layout="wide")
 
-# Default PINs
+# -------------------------
+# PINs (everyone 1234 now)
+# -------------------------
 USER_PINS = {
-    "dad": "1111",
-    "neil": "2222",
-    "lucas": "3333",
-    "guest": "0000",
+    "dad": "1234",
+    "neil": "1234",
+    "lucas": "1234",
+    "guest": "1234",
 }
 
-# Read secrets
-FINNHUB_KEY = st.secrets.get("API_KEY", None)
+# readable theme for each login (light bg, dark text)
+USER_THEMES = {
+    "dad":   {"bg": "#f0f2f6", "fg": "#000000", "label": "Dad"},
+    "neil":  {"bg": "#f9fafc", "fg": "#000000", "label": "Neil"},
+    "lucas": {"bg": "#ffffff", "fg": "#000000", "label": "Lucas"},
+    "guest": {"bg": "#ffffff", "fg": "#000000", "label": "Guest"},
+}
+
+# -------------------------
+# Secrets from Streamlit Cloud
+# -------------------------
+FINNHUB_KEY = st.secrets.get("FINNHUB_KEY", None)
 ALPACA_KEY = st.secrets.get("ALPACA_KEY", None)
 ALPACA_SECRET = st.secrets.get("ALPACA_SECRET", None)
-ALPACA_BASE_URL = st.secrets.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
+ALPACA_BASE_URL = st.secrets.get(
+    "ALPACA_BASE_URL",
+    "https://paper-api.alpaca.markets"
+)
 
-# =========================
-# STYLE / THEME
-# =========================
-def set_style(user):
-    """Apply background/text color based on who is logged in."""
+# ==========================================================
+# State init
+# ==========================================================
+def init_state():
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "user" not in st.session_state:
+        st.session_state.user = None
+    if "auto_trade" not in st.session_state:
+        st.session_state.auto_trade = {
+            "dad": False,
+            "neil": False,
+            "lucas": False,
+            "guest": False,
+        }
+    if "trade_log" not in st.session_state:
+        st.session_state.trade_log = {
+            "dad": [],
+            "neil": [],
+            "lucas": [],
+            "guest": [],
+        }
+
+def log_trade(u, msg, pl=None):
+    st.session_state.trade_log[u].append({
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "note": msg,
+        "p_l": pl if pl is not None else "",
+    })
+
+# ==========================================================
+# Styling per user
+# ==========================================================
+def apply_user_theme(user):
     theme = USER_THEMES.get(user, USER_THEMES["guest"])
     st.markdown(
         f"""
@@ -45,36 +83,37 @@ def set_style(user):
             background-color: {theme['bg']} !important;
             color: {theme['fg']} !important;
         }}
-        div[data-testid="stMarkdown"] h1, 
-        div[data-testid="stMarkdown"] h2, 
-        div[data-testid="stMarkdown"] h3,
-        div[data-testid="stMetricValue"] {{
+        .stMetricValue, .stMetricLabel, h1, h2, h3, h4, h5, h6, p, span, div {{
             color: {theme['fg']} !important;
         }}
         </style>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
     return theme
 
-# =========================
-# FINNHUB DATA
-# =========================
-def get_finnhub_candles(symbol: str, resolution="5", lookback_minutes=390):
+# ==========================================================
+# Data helpers
+# ==========================================================
+def get_finnhub_intraday(symbol: str, resolution="5", lookback_minutes=390):
     if not FINNHUB_KEY:
         return None, "No FINNHUB_KEY in secrets"
     now = int(datetime.now().timestamp())
     frm = now - (lookback_minutes * 60)
     url = (
-        f"https://finnhub.io/api/v1/stock/candle"
-        f"?symbol={symbol.upper()}&resolution={resolution}&from={frm}&to={now}&token={FINNHUB_KEY}"
+        "https://finnhub.io/api/v1/stock/candle"
+        f"?symbol={symbol.upper()}"
+        f"&resolution={resolution}"
+        f"&from={frm}"
+        f"&to={now}"
+        f"&token={FINNHUB_KEY}"
     )
     r = requests.get(url)
     if r.status_code != 200:
-        return None, f"Finnhub error {r.status_code}"
+        return None, f"Finnhub HTTP {r.status_code}"
     data = r.json()
     if data.get("s") != "ok":
-        return None, "No candle data"
+        return None, "Finnhub returned no data"
     df = pd.DataFrame({
         "t": pd.to_datetime(data["t"], unit="s"),
         "Open": data["o"],
@@ -85,8 +124,8 @@ def get_finnhub_candles(symbol: str, resolution="5", lookback_minutes=390):
     })
     return df, None
 
-def calc_range_levels(df_5m, atr_lookback=14, cushion_frac=0.25):
-    if df_5m is None or len(df_5m) == 0:
+def calc_levels(df_5m: pd.DataFrame, atr_lookback=14, cushion_frac=0.25):
+    if df_5m is None or len(df_5m) < 6:
         return None
     first_slice = df_5m.head(6)
     opening_high = first_slice["High"].max()
@@ -101,35 +140,39 @@ def calc_range_levels(df_5m, atr_lookback=14, cushion_frac=0.25):
     last_price = df_5m["Close"].iloc[-1]
     return {
         "atr": float(atr_est),
+        "opening_high": float(opening_high),
+        "opening_low": float(opening_low),
         "high_fence": float(high_fence),
         "low_fence": float(low_fence),
         "last_price": float(last_price),
     }
 
-def breakout_status(price, high_fence, low_fence):
-    if price > high_fence:
+def classify_mode(last_price, high_fence, low_fence):
+    if last_price > high_fence:
         return "BREAKOUT"
-    elif price < low_fence:
+    elif last_price < low_fence:
         return "BREAKDOWN"
     else:
         return "RANGE_HELD"
 
-# =========================
-# ALPACA
-# =========================
-def get_alpaca_account():
+# ==========================================================
+# Alpaca helpers
+# ==========================================================
+def alpaca_status():
     if not (ALPACA_KEY and ALPACA_SECRET and ALPACA_BASE_URL):
-        return None, "Missing Alpaca creds"
+        return None, "Alpaca creds missing"
     headers = {
         "APCA-API-KEY-ID": ALPACA_KEY,
         "APCA-API-SECRET-KEY": ALPACA_SECRET,
     }
     r = requests.get(f"{ALPACA_BASE_URL}/v2/account", headers=headers)
-    if r.status_code != 200:
-        return None, f"Alpaca error {r.status_code}: {r.text}"
-    return r.json(), None
+    if r.status_code == 200:
+        return r.json(), None
+    return None, f"{r.status_code}: {r.text}"
 
-def place_alpaca_order(symbol, qty, side):
+def alpaca_market_order(symbol, qty, side):
+    if not (ALPACA_KEY and ALPACA_SECRET and ALPACA_BASE_URL):
+        return None, "Missing Alpaca creds"
     headers = {
         "APCA-API-KEY-ID": ALPACA_KEY,
         "APCA-API-SECRET-KEY": ALPACA_SECRET,
@@ -140,152 +183,176 @@ def place_alpaca_order(symbol, qty, side):
         "qty": str(int(qty)),
         "side": side,
         "type": "market",
-        "time_in_force": "day"
+        "time_in_force": "day",
     }
-    return requests.post(f"{ALPACA_BASE_URL}/v2/orders", headers=headers, json=body)
+    r = requests.post(f"{ALPACA_BASE_URL}/v2/orders", headers=headers, json=body)
+    return r, None
 
-# =========================
-# BEGINNER SCAN
-# =========================
-def suggest_stocks_watchlist():
-    watchlist = ["SPY", "TSLA", "NVDA", "AAPL", "AMD", "QQQ", "IWM"]
-    recs = []
+# ==========================================================
+# Beginner Helper
+# ==========================================================
+def beginner_scan():
+    watchlist = ["SPY", "NVDA", "AAPL", "TSLA", "AMZN"]
+    out_rows = []
     for sym in watchlist:
-        df, err = get_finnhub_candles(sym)
-        if err or df is None or len(df) < 10:
+        df_sym, err = get_finnhub_intraday(sym)
+        if err or df_sym is None or len(df_sym) < 6:
             continue
-        stats = calc_range_levels(df)
-        if not stats:
+        levels = calc_levels(df_sym)
+        if not levels:
             continue
-        mode = breakout_status(stats["last_price"], stats["high_fence"], stats["low_fence"])
-        recs.append({
-            "symbol": sym,
-            "price": stats["last_price"],
-            "atr": stats["atr"],
-            "mode": mode,
+        mode = classify_mode(
+            levels["last_price"],
+            levels["high_fence"],
+            levels["low_fence"],
+        )
+        out_rows.append({
+            "Symbol": sym,
+            "Last": round(levels["last_price"], 2),
+            "ATR": round(levels["atr"], 2),
+            "Mode": mode,
         })
     priority = {"BREAKOUT": 0, "BREAKDOWN": 1, "RANGE_HELD": 2}
-    recs.sort(key=lambda r: priority.get(r["mode"], 99))
-    return recs
+    out_rows.sort(key=lambda row: priority.get(row["Mode"], 99))
+    if len(out_rows) == 0:
+        return pd.DataFrame([{
+            "Symbol": "N/A",
+            "Last": "",
+            "ATR": "",
+            "Mode": "No data / key?"
+        }])
+    return pd.DataFrame(out_rows)
 
-# =========================
-# STATE
-# =========================
-def init_user_state():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    if "user" not in st.session_state:
-        st.session_state.user = None
-    if "trade_log" not in st.session_state:
-        st.session_state.trade_log = {k: [] for k in USER_PINS}
-    if "auto_trade" not in st.session_state:
-        st.session_state.auto_trade = {k: False for k in USER_PINS}
-
-def log_trade(user, message):
-    st.session_state.trade_log[user].append({
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "message": message,
-    })
-
-# =========================
-# LOGIN
-# =========================
+# ==========================================================
+# LOGIN SCREEN
+# ==========================================================
 def show_login():
-    st.title("🔐 Redeyebatt Trading Terminal Login")
-    col1, col2 = st.columns(2)
-    with col1:
-        username = st.text_input("User (dad / neil / lucas / guest)").strip().lower()
-    with col2:
+    st.title("🔐 Login")
+    c1, c2 = st.columns(2)
+    with c1:
+        username = st.text_input("Username").strip().lower()
+    with c2:
         pin = st.text_input("PIN", type="password")
-    if st.button("Log In"):
+    if st.button("Enter"):
         if username in USER_PINS and pin == USER_PINS[username]:
             st.session_state.logged_in = True
             st.session_state.user = username
-            st.success(f"Welcome, {USER_THEMES[username]['name']} ✅")
             st.rerun()
         else:
-            st.error("Invalid login")
+            st.error("Access denied")
 
-# =========================
+# ==========================================================
 # DASHBOARD
-# =========================
+# ==========================================================
 def show_dashboard():
     user = st.session_state.user
-    theme = set_style(user)
-    st.markdown(f"### Welcome, {theme['name']}")
-
+    theme = apply_user_theme(user)
+    st.markdown(f"### Welcome, {theme['label']}")
     st.sidebar.header("Session Controls")
     symbol = st.sidebar.text_input("Ticker Symbol", "SPY").upper()
     qty = st.sidebar.number_input("Trade Quantity", min_value=1, value=1)
-    auto = st.sidebar.checkbox("Auto Trade", value=st.session_state.auto_trade[user])
-    st.session_state.auto_trade[user] = auto
+    auto_flag = st.sidebar.checkbox(
+        "Auto Trade (paper) breakout/breakdown",
+        value=st.session_state.auto_trade[user],
+        help="If ON: breakout will BUY, breakdown will SELL using paper account",
+    )
+    st.session_state.auto_trade[user] = auto_flag
+    st.sidebar.markdown("---")
 
-    df_live, fin_err = get_finnhub_candles(symbol)
-    stats = calc_range_levels(df_live) if not fin_err else None
-    acct, acct_err = get_alpaca_account()
+    df_live, fin_err = get_finnhub_intraday(symbol)
+    levels = calc_levels(df_live) if df_live is not None else None
+    acct, acct_err = alpaca_status()
 
     colA, colB, colC = st.columns(3)
-    if acct:
-        colA.metric("Buying Power", f"${float(acct['buying_power']):,.2f}")
-        colB.metric("Equity", f"${float(acct['equity']):,.2f}")
-        colC.metric("Cash", f"${float(acct['cash']):,.2f}")
+    if acct and not acct_err:
+        colA.metric("Buying Power", f"${float(acct.get('buying_power',0)):,.2f}")
+        colB.metric("Cash", f"${float(acct.get('cash',0)):,.2f}")
+        colC.success("Alpaca Connected ✅")
     else:
         colA.write("Alpaca not connected")
-        colB.write(acct_err)
+        colB.write(acct_err if acct_err else "")
         colC.write("")
 
-    if stats:
-        mode = breakout_status(stats["last_price"], stats["high_fence"], stats["low_fence"])
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("ATR", f"{stats['atr']:.2f}")
-        col2.metric("High Fence", f"{stats['high_fence']:.2f}")
-        col3.metric("Low Fence", f"{stats['low_fence']:.2f}")
-        col4.metric("Last Price", f"{stats['last_price']:.2f}")
-        st.markdown(f"**Market Mode:** {mode}")
+    if levels:
+        mode = classify_mode(
+            levels["last_price"],
+            levels["high_fence"],
+            levels["low_fence"],
+        )
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("ATR", f"{levels['atr']:.2f}")
+        m2.metric("High Fence", f"{levels['high_fence']:.2f}")
+        m3.metric("Low Fence", f"{levels['low_fence']:.2f}")
+        m4.metric("Last Price", f"{levels['last_price']:.2f}")
+        st.write(f"**Market Mode:** {mode}")
 
-        if mode == "BREAKOUT" and auto:
-            r = place_alpaca_order(symbol, qty, "buy")
-            if r.status_code in (200, 201):
-                log_trade(user, f"AUTO BUY {qty} {symbol} (BREAKOUT)")
-                st.success("Auto BUY sent")
-        elif mode == "BREAKDOWN" and auto:
-            r = place_alpaca_order(symbol, qty, "sell")
-            if r.status_code in (200, 201):
-                log_trade(user, f"AUTO SELL {qty} {symbol} (BREAKDOWN)")
-                st.warning("Auto SELL sent")
+        if auto_flag and acct and not acct_err:
+            if mode == "BREAKOUT":
+                r, _ = alpaca_market_order(symbol, qty, "buy")
+                if r is not None and r.status_code in (200, 201):
+                    st.success("AUTO BUY sent ✅")
+                    log_trade(user, f"AUTO BUY {qty} {symbol} (BREAKOUT)")
+            elif mode == "BREAKDOWN":
+                r, _ = alpaca_market_order(symbol, qty, "sell")
+                if r is not None and r.status_code in (200, 201):
+                    st.warning("AUTO SELL sent ⛔")
+                    log_trade(user, f"AUTO SELL {qty} {symbol} (BREAKDOWN)")
+            else:
+                st.info("AUTO: HOLD / RANGE")
 
         if df_live is not None and len(df_live) > 0:
             fig = go.Figure()
-            fig.add_trace(go.Candlestick(
-                x=df_live["t"],
-                open=df_live["Open"],
-                high=df_live["High"],
-                low=df_live["Low"],
-                close=df_live["Close"],
-                name=symbol,
-            ))
-            fig.add_hline(y=stats["high_fence"], line_color="green", line_dash="dash", annotation_text="High Fence")
-            fig.add_hline(y=stats["low_fence"], line_color="red", line_dash="dash", annotation_text="Low Fence")
+            fig.add_trace(
+                go.Candlestick(
+                    x=df_live["t"],
+                    open=df_live["Open"],
+                    high=df_live["High"],
+                    low=df_live["Low"],
+                    close=df_live["Close"],
+                    name=symbol,
+                )
+            )
+            fig.add_hline(
+                y=levels["high_fence"], line_color="green", line_dash="dash", annotation_text="High Fence"
+            )
+            fig.add_hline(
+                y=levels["low_fence"], line_color="red", line_dash="dash", annotation_text="Low Fence"
+            )
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.error(f"Data feed error: {fin_err}")
+        st.error(f"Data feed unavailable: {fin_err if fin_err else 'No data'}")
 
-    st.subheader("Trade Log")
+    st.subheader("Trade Controls (Paper)")
+    col_buy, col_sell = st.columns(2)
+    if col_buy.button("BUY Market (Paper)"):
+        r, _ = alpaca_market_order(symbol, qty, "buy")
+        if r is not None and r.status_code in (200, 201):
+            col_buy.success("Buy sent ✅")
+            log_trade(user, f"MANUAL BUY {qty} {symbol}")
+    if col_sell.button("SELL Market (Paper)"):
+        r, _ = alpaca_market_order(symbol, qty, "sell")
+        if r is not None and r.status_code in (200, 201):
+            col_sell.success("Sell sent ✅")
+            log_trade(user, f"MANUAL SELL {qty} {symbol}")
+
+    st.subheader("Session Log / P&L")
     if len(st.session_state.trade_log[user]) == 0:
         st.write("No trades yet.")
     else:
         st.dataframe(pd.DataFrame(st.session_state.trade_log[user]), use_container_width=True)
 
     st.subheader("🔍 Beginner Helper: Stocks to Watch")
+    st.caption("BREAKOUT = bullish run. BREAKDOWN = short bias. RANGE_HELD = chop.")
     if st.button("Scan Watchlist"):
-        recs = suggest_stocks_watchlist()
-        st.dataframe(pd.DataFrame(recs), use_container_width=True)
+        recs = beginner_scan()
+        st.dataframe(recs, use_container_width=True)
+    st.caption("Goal: stop gambling. Only touch tickers that are actually moving.")
 
-# =========================
+# ==========================================================
 # MAIN
-# =========================
+# ==========================================================
 def main():
-    init_user_state()
+    init_state()
     if not st.session_state.logged_in:
         show_login()
     else:
