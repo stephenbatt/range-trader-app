@@ -365,8 +365,9 @@ def show_dashboard():
     st.session_state.auto_trade[user] = auto_flag
     st.sidebar.markdown("---")
 
-    df_live, fin_err = get_finnhub_intraday(symbol)
-    levels = calc_levels(df_live) if df_live is not None else None
+    # Unified data fetch (Finnhub + Polygon + cache)
+df_live, source_name, data_err = get_intraday_5m(symbol)
+stats = calc_range_levels(df_live) if df_live is not None else None
     acct, acct_err = alpaca_status()
 
     colA, colB, colC = st.columns(3)
@@ -380,17 +381,21 @@ def show_dashboard():
         colC.write("")
 
     if levels:
-        mode = classify_mode(
-            levels["last_price"],
-            levels["high_fence"],
-            levels["low_fence"],
-        )
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("ATR", f"{levels['atr']:.2f}")
-        m2.metric("High Fence", f"{levels['high_fence']:.2f}")
-        m3.metric("Low Fence", f"{levels['low_fence']:.2f}")
-        m4.metric("Last Price", f"{levels['last_price']:.2f}")
-        st.write(f"**Market Mode:** {mode}")
+    mode = classify_mode(
+        levels["last_price"],
+        levels["high_fence"],
+        levels["low_fence"],
+    )
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("ATR", f"{levels['atr']:.2f}")
+    m2.metric("High Fence", f"{levels['high_fence']:.2f}")
+    m3.metric("Low Fence", f"{levels['low_fence']:.2f}")
+    m4.metric("Last Price", f"{levels['last_price']:.2f}")
+    st.write(f"**Market Mode:** {mode}")
+
+    # 👇 NEW: show which data source is active
+    if source_name:
+        st.caption(f"📊 Data Source: {source_name}")
 
         if auto_flag and acct and not acct_err:
             if mode == "BREAKOUT":
@@ -466,4 +471,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
