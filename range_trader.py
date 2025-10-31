@@ -380,7 +380,7 @@ stats = calc_range_levels(df_live) if df_live is not None else None
         colB.write(acct_err if acct_err else "")
         colC.write("")
 
-    if levels:
+    if levels: 
     mode = classify_mode(
         levels["last_price"],
         levels["high_fence"],
@@ -392,6 +392,10 @@ stats = calc_range_levels(df_live) if df_live is not None else None
     m3.metric("Low Fence", f"{levels['low_fence']:.2f}")
     m4.metric("Last Price", f"{levels['last_price']:.2f}")
     st.write(f"**Market Mode:** {mode}")
+
+    # 👇 NEW: show which data source is active
+    if source_name:
+        st.caption(f"📊 Data Source: {source_name}")
 
     # 👇 NEW: show which data source is active
     if source_name:
@@ -471,5 +475,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
